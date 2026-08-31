@@ -418,6 +418,45 @@ def digest(body: str) -> str:
     return hashlib.sha256(body.strip().encode()).hexdigest()[:16]
 
 
+NUTRIENTS = {
+    "calories": "calories",
+    "protein": "protein_g",
+    "fat": "fat_g",
+    "saturated fat": "saturated_fat_g",
+    "unsaturated fat": "unsaturated_fat_g",
+    "trans fat": "trans_fat_g",
+    "carbohydrate": "carbs_g",
+    "carbohydrates": "carbs_g",
+    "fiber": "fiber_g",
+    "dietary fiber": "fiber_g",
+    "sugar": "sugar_g",
+    "sugars": "sugar_g",
+    "sodium": "sodium_mg",
+    "cholesterol": "cholesterol_mg",
+}
+# `**Fat** 14 grams`, `**Calories**: 337`, and the run-on `Calories (kcal) 420 Fat (g) 33 ...` that some sites emit on one line.
+NUTRIENT_PAIR = re.compile(
+    r"(?:\*\*)?\b(" + "|".join(sorted(NUTRIENTS, key=len, reverse=True)) + r")\b(?:\*\*)?"
+    r"\s*(?:\((?:kcal|g|mg)\))?\s*:?\s*([\d.]+)", re.I)
+
+
+def parse_nutrition(text: str) -> dict[str, float]:
+    """Pull numbers out of the nutrition prose so a view can filter on them.
+
+    Sources disagree about servings and about what they measure, so these are for "show me the high-protein ones", not for keeping a ledger.
+    """
+    out: dict[str, float] = {}
+    for match in NUTRIENT_PAIR.finditer(text or ""):
+        key = NUTRIENTS[match.group(1).lower()]
+        try:
+            value = float(match.group(2))
+        except ValueError:
+            continue
+        # "Saturated fat" also matches "fat"; longest-name-first ordering in the pattern means the specific one wins, so never overwrite a value already found.
+        out.setdefault(key, value)
+    return out
+
+
 def image_suffix(head: bytes) -> str:
     """Mela stores whatever the source served — a third of these are not JPEG."""
     if head[:3] == b"\xff\xd8\xff":
@@ -524,6 +563,7 @@ def pull(args):
         # The source is in the body where you want to read it, but a Bases view can only sort and filter on frontmatter, so it lives in both.
         if recipe.link:
             meta["source"] = recipe.link
+        meta.update(parse_nutrition(recipe.nutrition))
 
         # Mela records that a recipe is flagged, never when it was flagged, so a "want to cook" list can only be ordered by when the recipe was added. Stamp the first sync that sees the flag set and keep that date for as long as it stays set. Keyed on whether the stamp exists rather than on the flag changing, so a flag flipped from a card in Obsidian is stamped on the next pull just the same.
         for flag, stamp in (("favorite", "favorite_since"), ("wantToCook", "wantToCook_since")):

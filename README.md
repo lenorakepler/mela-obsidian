@@ -141,6 +141,7 @@ Mela stores ingredients and instructions as one string per field, newline-separa
 ## Things worth knowing before you trust it
 
 - **A note without a `mela_id` is never overwritten.** Hand-written notes have no hash to compare against, so they are treated as not ours: if a Mela recipe wants the same filename, it takes a suffixed one instead.
+- **Nutrition is parsed into numbers** — `calories`, `protein_g`, `fat_g`, `saturated_fat_g`, `carbs_g`, `fiber_g`, `sugar_g`, `sodium_mg`, `cholesterol_mg` — so a view can filter and sort on them, while the prose stays in the body where it is read. Roughly 30% of a typical library has any of this, and calories far less than the macros: many sites publish grams without a total. The numbers come from many sites with different serving assumptions, so they answer "show me the high-protein ones" and should not be treated as a ledger.
 - **Duplicate ids collapse.** If two recipes in Mela share an `id`, they become one note, and `pull` says how many did.
 - **Repeated titles get a suffix.** A hash of the full id, not a prefix of it — recipe ids are often URLs, so the first characters are the same for everything from one site.
 - **Images are opt-in.** `--images` copies the first photo per recipe into `attachments/`, named by what the bytes actually are. In one library of 1,234 recipes the photos were 990 JPEG, 84 HEIC, 35 PNG, 2 GIF and 1 WebP, so writing them all as `.jpg` gives you a folder of files Obsidian will not display.
