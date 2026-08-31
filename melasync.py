@@ -514,6 +514,9 @@ def pull(args):
             meta["mela_sent"] = existing_meta["mela_sent"]
         if image:
             meta["image"] = image
+        # The source is in the body where you want to read it, but a Bases view can only sort and filter on frontmatter, so it lives in both.
+        if recipe.link:
+            meta["source"] = recipe.link
 
         # Mela records that a recipe is flagged, never when it was flagged, so a "want to cook" list can only be ordered by when the recipe was added. Stamp the first sync that sees the flag set and keep that date for as long as it stays set. Keyed on whether the stamp exists rather than on the flag changing, so a flag flipped from a card in Obsidian is stamped on the next pull just the same.
         for flag, stamp in (("favorite", "favorite_since"), ("wantToCook", "wantToCook_since")):
