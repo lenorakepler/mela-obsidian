@@ -91,18 +91,19 @@ def read_library() -> list[Recipe]:
         ):
             tags.setdefault(row["pk"], []).append(row["title"])
 
-        # Core Data spills a large blob to a file under _EXTERNAL_DATA and leaves the UUID filename in the column, but keeps a small one inline. Both shapes are in this table.
+        # ZDATA is a tagged blob: a leading 0x01 means the image bytes follow inline, 0x02 that the next 36 characters name a file under _EXTERNAL_DATA, where Core Data spills the larger ones. Writing the blob out whole produces a file with a stray tag byte in front of the JPEG, or one containing nothing but a UUID — which is what "the images are corrupted" looks like.
         images: dict[int, list[Path | bytes]] = {}
         for row in db.execute("SELECT ZRECIPE pk, ZDATA data FROM ZRECIPEIMAGEOBJECT ORDER BY ZINDEX"):
-            blob, pk = row["data"], row["pk"]
+            pk, blob = row["pk"], row["data"]
             if not pk or not blob:
                 continue
-            if isinstance(blob, bytes) and re.fullmatch(rb"[0-9A-Fa-f-]{36}", blob):
-                path = EXTERNAL / blob.decode()
+            blob = bytes(blob)
+            if blob[0] == 2:
+                path = EXTERNAL / blob[1:37].decode(errors="replace")
                 if path.is_file():
                     images.setdefault(pk, []).append(path)
-            else:
-                images.setdefault(pk, []).append(bytes(blob))
+            elif blob[0] == 1:
+                images.setdefault(pk, []).append(blob[1:])
 
         out = []
         for row in db.execute("SELECT * FROM ZRECIPEOBJECT"):
@@ -285,6 +286,21 @@ def digest(body: str) -> str:
     return hashlib.sha256(body.strip().encode()).hexdigest()[:16]
 
 
+def image_suffix(head: bytes) -> str:
+    """Mela stores whatever the source served — a third of these are not JPEG."""
+    if head[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if head[:4] == b"\x89PNG":
+        return ".png"
+    if head[4:12].startswith(b"ftyp"):
+        return ".heic"
+    if head[:4] == b"GIF8":
+        return ".gif"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return ".webp"
+    return ".img"
+
+
 def safe_name(title: str) -> str:
     name = ILLEGAL.sub("-", title).strip(" .")
     return (name or "Untitled")[:120]
@@ -340,12 +356,10 @@ def pull(args):
         image = None
         if args.images and recipe.images:
             attachments.mkdir(parents=True, exist_ok=True)
-            image = f"{safe_name(recipe.title)}.jpg"
             source = recipe.images[0]
-            if isinstance(source, Path):
-                shutil.copyfile(source, attachments / image)
-            else:
-                (attachments / image).write_bytes(source)
+            data = source.read_bytes() if isinstance(source, Path) else source
+            image = f"{safe_name(recipe.title)}{image_suffix(data[:16])}"
+            (attachments / image).write_bytes(data)
             image = f"attachments/{image}"
 
         body = body_for(recipe, image)
