@@ -51,7 +51,7 @@ The copied store is opened and run through `PRAGMA integrity_check` before the b
 
 ## Not clobbering your edits
 
-Every note carries a `mela_hash` — the hash of the body as it stood at the last sync. That one field is what makes both directions safe to run repeatedly:
+Every note carries a `mela_hash` — a hash of the body as it stood at the last sync, together with the promoted header properties. That one field is what makes both directions safe to run repeatedly:
 
 - A note whose body still matches its hash has not been touched in Obsidian. `pull` may overwrite it freely.
 - A note whose body no longer matches has been edited. `pull` leaves it alone and says so; `push` treats it as the thing to send.
@@ -140,7 +140,9 @@ Servings: Makes 6 servings
 1. Preheat oven to 350°F. Pour 6 cups water into a 13x9x2-inch glass baking dish.
 ```
 
-Mela stores ingredients and instructions as one string per field, newline-separated, with a leading `#` marking a group heading. Those become a bulleted list, a numbered list, and `###` headings; `push` converts them back, dropping any task checkbox it finds — `- [x] 2 eggs` is a cooking state, not an ingredient named `[x] 2 eggs`. `Source`, `Servings`, `Prep`, `Cook`, and `Total` live in the body rather than the frontmatter, because that is where you want to read them — `push` parses them back out of those lines.
+Mela stores ingredients and instructions as one string per field, newline-separated, with a leading `#` marking a group heading. Those become a bulleted list, a numbered list, and `###` headings; `push` converts them back, dropping any task checkbox it finds — `- [x] 2 eggs` is a cooking state, not an ingredient named `[x] 2 eggs`. `Source`, `Servings`, `Prep`, `Cook` and `Total` are frontmatter properties and appear nowhere in the body. Bases can only filter, sort and group on frontmatter, and a value kept in both places is a value that can disagree with itself. The Properties panel displays them while you read.
+
+Those fields are covered by `mela_hash` along with the body. Hashing the body alone would mean changing the servings in Obsidian never registered as an edit, and `push` would skip it without saying so.
 
 ## Things worth knowing before you trust it
 

@@ -61,28 +61,17 @@ Recovering the numbers means re-reading the pages. Mela ships a Shortcuts action
 
 ## Decide which fields belong in frontmatter rather than the body
 
-**Status:** open question, no work done.
+**Status:** decided and done for the header fields; `Description` still open.
 
-Right now the split is roughly "what you read goes in the body, what the sync needs goes in frontmatter". That was a reasonable first cut but it is not obviously the right line, for two separate reasons.
+`source`, `servings`, `prep_time`, `cook_time` and `total_time` are frontmatter properties only, and no longer rendered in the body. Duplication was ruled out — a value in two places is a value that can disagree with itself — and frontmatter was the only viable side, since Bases cannot see the body at all.
 
-The practical one: **Bases can only see frontmatter.** A field in the body cannot be a column, a filter, a sort key, or a group-by. That is already why `image`, `source`, and the parsed nutrition numbers were promoted, and each promotion was driven by wanting a view rather than by any judgement about where the field belonged.
+`mela_hash` now covers those properties as well as the body. It has to: hashing the body alone would mean changing the servings in Obsidian never counted as an edit, and `push` would skip it silently.
 
-The better reason: some of these are **genuinely structural metadata and should be properties regardless of what Bases can do**. `Description` — Mela's `text` field — is the clearest case. It is a short standalone summary of the recipe, not part of the recipe's prose, and it currently sits as a bare paragraph at the top of the body where nothing can address it. `Servings`, `Prep`, `Cook` and `Total` are arguably the same: they are values, they are the sort of thing you filter on ("under 30 minutes"), and they are rendered in the body only because that is where they read nicely.
+### Still open
 
-### What makes this more than a formatting choice
+`Description` — Mela's `text` field — sits as a bare paragraph at the top of the body where nothing can address it. It is a short standalone summary rather than part of the recipe's prose, so it is arguably structural metadata that belongs in frontmatter whatever Bases can render. Moving it would leave the body starting directly at the photo and `## Ingredients`, which may read better or worse; worth living with the current arrangement for a while before deciding.
 
-Two mechanisms currently assume the body carries the content:
-
-- **`mela_hash` is a hash of the body.** It is how `pull` tells an edited note from an untouched one and how `push` decides what to send. A field that moves to frontmatter stops being covered by it, so editing that field would no longer register as an edit and `push` would silently skip it. Either the hash has to cover the relevant frontmatter too, or promoted fields need their own comparison.
-- **`note_to_recipe` parses `Source:`, `Servings:`, `Prep:`, `Cook:` and `Total:` back out of the body's preamble lines** on the way to Mela. If those move, that parsing moves with them, and the two must not disagree — a value in both places with different contents is the failure mode to design out.
-
-### Options, roughly in increasing order of disruption
-
-1. **Duplicate, as now.** `source` is in both; the body renders it and frontmatter carries it. Simple, and the duplication is invisible because only one side is authoritative for the sync. Does not scale — every duplicated field is a chance for the two to drift.
-2. **Promote and stop rendering.** Move `Description` and the times into frontmatter alone, and let Obsidian's Properties panel display them. Cleanest data model; costs the readable header at the top of a note, which matters when the note is what you cook from.
-3. **Promote and render from frontmatter.** Keep the reading experience by rendering the header from properties — a `Templater`-style inline block, or a CSS/Dataview rendering. Best of both, most machinery, and the rendered text must never become a second source of truth.
-
-Worth deciding deliberately rather than one field at a time when a view happens to need it, which is how the first three got promoted.
+If it does move, the third option from the original write-up becomes worth considering: render a readable header back from the properties, so the note still reads like a recipe without the rendered text becoming a second source of truth.
 
 ## Housekeeping
 

@@ -46,6 +46,9 @@ ILLEGAL = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 
 SECTIONS = ["Ingredients", "Instructions", "Notes", "Nutrition", "Photos"]
 
+# Header fields live in frontmatter, not in the body, so a view can filter and sort on them. They must therefore be covered by the edit hash as well — otherwise changing the servings in Obsidian would not register as an edit and `push` would skip it.
+PROMOTED = ("source", "servings", "prep_time", "cook_time", "total_time")
+
 # A cook-log entry is a `### Made <date>` heading in the vault and a bold inline `**Made <date>:**` run in Mela — a heading is the right structure for a note and reads badly in Mela's spacing, and the two sides already differ, so each gets the form that suits it.
 LOG_HEADING = re.compile(r"^###[ \t]*Made[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*:?[ \t]*$", re.M)
 LOG_BOLD = re.compile(r"^\*\*Made[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*:?\*\*[ \t]*", re.M)
@@ -299,18 +302,6 @@ def body_for(recipe: Recipe, image: str | None, extra_images: list[str] | None =
     if recipe.text.strip() and recipe.text.strip() != recipe.title:
         parts.append(recipe.text.strip() + "\n")
 
-    # Two trailing spaces is a markdown hard break, which keeps these on separate lines without a list.
-    meta = []
-    if recipe.link:
-        host = re.sub(r"^www\.", "", re.sub(r"^https?://", "", recipe.link).split("/")[0])
-        meta.append(f"Source: [{host}]({recipe.link})" if recipe.link.startswith("http") else f"Source: {recipe.link}")
-    for label, value in (("Servings", recipe.yield_), ("Prep", recipe.prep_time),
-                         ("Cook", recipe.cook_time), ("Total", recipe.total_time)):
-        if value:
-            meta.append(f"{label}: {value}")
-    if meta:
-        parts.append("  \n".join(meta) + "  \n")
-
     for heading, block, render in (
         ("Ingredients", recipe.ingredients, bullets),
         ("Instructions", recipe.instructions, numbered),
@@ -382,28 +373,20 @@ def note_to_recipe(meta: dict, body: str, vault: Path | None = None) -> Recipe:
         sections[current] = "\n".join(buffer).strip()
     preamble = body.split("\n## ")[0]
 
-    def line_value(label):
-        m = re.search(rf"^{label}:\s*(.+?)\s*$", preamble, re.M)
-        return m.group(1).strip() if m else ""
-
-    link = line_value("Source")
-    if md := re.match(r"\[.*?\]\((.*?)\)", link):
-        link = md.group(1)
-
     description = "\n".join(
         line for line in preamble.split("\n")
-        if line.strip() and not re.match(r"^(Source|Servings|Prep|Cook|Total):", line) and not line.startswith("![[")
+        if line.strip() and not line.startswith("![[")
     ).strip()
 
     return Recipe(
         id=meta.get("mela_id") or "",
         title=meta.get("title") or "",
         text=description,
-        link=link,
-        yield_=line_value("Servings"),
-        prep_time=line_value("Prep"),
-        cook_time=line_value("Cook"),
-        total_time=line_value("Total"),
+        link=str(meta.get("source") or ""),
+        yield_=str(meta.get("servings") or ""),
+        prep_time=str(meta.get("prep_time") or ""),
+        cook_time=str(meta.get("cook_time") or ""),
+        total_time=str(meta.get("total_time") or ""),
         ingredients=unbullets(sections.get("Ingredients", "")),
         instructions=unbullets(sections.get("Instructions", "")),
         notes=(expand_notes(sections.get("Notes", ""), vault) if vault else sections.get("Notes", "")).strip(),
@@ -417,6 +400,12 @@ def note_to_recipe(meta: dict, body: str, vault: Path | None = None) -> Recipe:
 
 def digest(body: str) -> str:
     return hashlib.sha256(body.strip().encode()).hexdigest()[:16]
+
+
+def content_digest(meta: dict, body: str) -> str:
+    """What counts as "the note has been edited": the body plus the promoted header fields."""
+    parts = [body.strip()] + [f"{key}={meta.get(key) or ''}" for key in PROMOTED]
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
 
 NUTRIENTS = {
@@ -521,7 +510,7 @@ def pull(args):
         existing_meta, existing_body = ({}, "")
         if path.exists():
             existing_meta, existing_body = parse_note(path.read_text(encoding="utf-8"))
-            if not existing_meta.get("mela_hash") or digest(existing_body) != existing_meta["mela_hash"]:
+            if not existing_meta.get("mela_hash") or content_digest(existing_meta, existing_body) != existing_meta["mela_hash"]:
                 # Edited in Obsidian since the last sync — or missing the hash entirely, which says the same thing less precisely. Overwriting either would silently discard work.
                 conflicts += 1
                 if not args.force:
@@ -555,7 +544,7 @@ def pull(args):
             "mela_id": recipe.id,
             "mela_date": datetime.fromtimestamp(recipe.date + CORE_DATA_EPOCH, timezone.utc).date().isoformat(),
             "mela_date_raw": recipe.date,
-            "mela_hash": digest(body),
+            "mela_hash": None,  # filled in below, once the promoted fields it covers are present
         }
         if existing_meta.get("mela_sent"):
             meta["mela_sent"] = existing_meta["mela_sent"]
@@ -563,6 +552,10 @@ def pull(args):
             meta["image"] = image
         # The source is in the body where you want to read it, but a Bases view can only sort and filter on frontmatter, so it lives in both.
         # A source is often a cookbook, an author, or a restaurant rather than a URL — and a few carry a citation with a URL inside it. Keep the text as written, and pull out a URL separately when there is one so a view can linkify without mangling the rest.
+        for key, value in (("servings", recipe.yield_), ("prep_time", recipe.prep_time),
+                           ("cook_time", recipe.cook_time), ("total_time", recipe.total_time)):
+            if value:
+                meta[key] = value
         if recipe.link:
             meta["source"] = recipe.link
             found = re.search(r"https?://\S+", recipe.link)
@@ -575,6 +568,7 @@ def pull(args):
         for flag, stamp in (("favorite", "favorite_since"), ("wantToCook", "wantToCook_since")):
             if meta[flag]:
                 meta[stamp] = existing_meta.get(stamp) or datetime.now().date().isoformat()
+        meta["mela_hash"] = content_digest(meta, body)
         if existing_body.strip() == body.strip() and dict(existing_meta) == meta:
             skipped += 1
             continue
@@ -599,7 +593,7 @@ def push(args):
             continue
         meta, body = parse_note(path.read_text(encoding="utf-8"))
         mela_id = str(meta.get("mela_id") or "")
-        if mela_id and meta.get("mela_hash") == digest(body) and not args.all:
+        if mela_id and meta.get("mela_hash") == content_digest(meta, body) and not args.all:
             continue
         if not mela_id and not args.new:
             continue
@@ -643,7 +637,7 @@ def push(args):
             for path, recipe in direct:
                 meta, body = parse_note(path.read_text(encoding="utf-8"))
                 meta["mela_id"] = recipe.id
-                meta["mela_hash"] = digest(body)
+                meta["mela_hash"] = content_digest(meta, body)
                 # What Mela holds now. A pull that regenerates this same text has learnt nothing new, and must leave the note — and its embeds — alone.
                 meta["mela_sent"] = digest(body_for(recipe, meta.get("image")))
                 front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=10**9)
@@ -732,7 +726,7 @@ def split_logs(args):
         touched.append((path.name, len(entries)))
         if not args.dry_run:
             new_body = head + "## Notes\n" + "\n".join(out) + (sep + tail if sep else "")
-            meta["mela_hash"] = digest(new_body)
+            meta["mela_hash"] = content_digest(meta, new_body)
             # The body we started from is, by construction, what Mela holds. Without this the next pull rebuilds that text and the embeds are gone.
             meta["mela_sent"] = digest(body)
             front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=10**9)
@@ -811,7 +805,7 @@ def status(args):
             print(f"  only in Obsidian: {path.name}")
             continue
         notes[str(mela_id)] = path
-        if meta.get("mela_hash") != digest(body):
+        if meta.get("mela_hash") != content_digest(meta, body):
             edited += 1
             print(f"  edited in Obsidian: {path.name}")
     missing = [r for i, r in library.items() if i not in notes]
