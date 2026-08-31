@@ -79,7 +79,9 @@ Two independent ones, worth knowing before deciding how carefully to tread.
 
 **The Mela side** is covered by `backup`, and by the single `pre-write/` snapshot that `push --write` refreshes before every write. That protects the recipe library and its photos.
 
-**The vault side** is covered by Obsidian Sync, which keeps version history and deleted-file history server-side. A note overwritten or deleted locally can be restored from Obsidian's own history, including its original timestamps — so "the local file is gone" is not the same as "the data is gone", and it is worth checking there before concluding anything is unrecoverable.
+**The vault side** is covered by Obsidian Sync, which keeps version history and deleted-file history server-side. A note overwritten or deleted locally can be restored from it, timestamps included.
+
+Neither is a reason to write more freely. Work as though there is no backup and be glad of one on the day it is needed — a restore is still an interruption and still work. What the safety nets change is only what to say afterwards: do not call something unrecoverable without having looked.
 
 ## Housekeeping
 
