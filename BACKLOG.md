@@ -91,7 +91,9 @@ Neither is a reason to write more freely. Work as though there is no backup and 
 
 ## Substantial recipe layout wants a plugin, not CSS
 
-`snippets/recipe-note.css` gets full width in all three modes, a floated cover photo, and ingredients beside instructions. That is about where CSS stops being the right tool.
+`snippets/recipe-note.css` gets full width and a floated cover photo. The two-column layout was written, tried, and removed — that is where CSS stopped being the right tool, and the reason turned out to be concrete rather than aesthetic.
+
+**Floating `.cm-line` breaks the caret.** CodeMirror positions the cursor from line geometry, so floating lines to build columns in live preview puts the caret in the wrong place. Nothing to tune around: the layout and the editor want the same property to mean different things.
 
 The obstacle is not selector syntax. In reading view a section can be named — `:has(h2[data-heading="Ingredients"])` — but CodeMirror exposes no equivalent, so live preview can only count headings by position, and hand-reordering a note's sections breaks it. Nor can CSS group siblings: ingredients and instructions are flat sibling blocks with a variable number belonging to each, which is why they are floated rather than placed in a grid. Independent scrolling per column, a step-at-a-time mode, quantity scaling, or checking off ingredients are all past the point where more `:has()` helps.
 
