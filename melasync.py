@@ -371,17 +371,28 @@ def pull(args):
 
 
 def push(args):
+    """Stage notes as .melarecipe files for Mela to import.
+
+    Mela's import is add-only, and `id` is the key it dedupes on: importing an id it already holds does nothing at all — no update, no duplicate, no warning. So an edit to a recipe Mela already has cannot be delivered as an edit. Staging it anyway would produce a file that imports "successfully" and changes nothing, which is the worst of the options.
+    """
     args.outbox.mkdir(parents=True, exist_ok=True)
-    staged = []
+    known = {r.id for r in read_library()}
+    staged, blocked = [], []
+
     for path in sorted(args.vault.glob("*.md")):
         meta, body = parse_note(path.read_text(encoding="utf-8"))
-        if not meta.get("mela_id") and not args.new:
+        mela_id = str(meta.get("mela_id") or "")
+        if mela_id and meta.get("mela_hash") == digest(body) and not args.all:
             continue
-        if meta.get("mela_hash") == digest(body) and not args.all:
+        if not mela_id and not args.new:
             continue
+
         recipe = note_to_recipe(meta, body)
         recipe.title = recipe.title or path.stem
-        if not recipe.id:
+        if mela_id in known and not args.as_new:
+            blocked.append(path)
+            continue
+        if not recipe.id or args.as_new:
             recipe.id = f"obsidian-{digest(path.stem + body)}"
         out = args.outbox / f"{safe_name(recipe.title)}.melarecipe"
         out.write_text(json.dumps(to_melarecipe(recipe), ensure_ascii=False, indent=2), encoding="utf-8")
@@ -390,11 +401,19 @@ def push(args):
     print(f"push: {len(staged)} staged -> {args.outbox}")
     for path in staged:
         print(f"  {path.name}")
+    if blocked:
+        print(f"\n  {len(blocked)} edited note(s) Mela will not accept, because it already holds that id:")
+        for path in blocked[:10]:
+            print(f"    {path.name}")
+        if len(blocked) > 10:
+            print(f"    ... and {len(blocked) - 10} more")
+        print("  Mela's import cannot update an existing recipe. Either edit it in Mela, or")
+        print("  re-run with --as-new to import a second copy under a fresh id and delete the old one there.")
     if staged and args.open:
         subprocess.run(["open", "-a", "Mela", *[str(p) for p in staged]], check=False)
-        print("  handed to Mela; confirm the import, then re-run `pull` to pick up its ids")
+        print("\n  handed to Mela; confirm each import, then re-run `pull` to pick up the new ids")
     elif staged:
-        print("  run again with --open to hand them to Mela, or drag them onto its window")
+        print("\n  run again with --open to hand them to Mela, or drag them onto its window")
 
 
 def status(args):
@@ -496,6 +515,7 @@ def main():
     p.add_argument("--outbox", type=Path, default=OUTBOX)
     p.add_argument("--all", action="store_true", help="stage every note, not only edited ones")
     p.add_argument("--new", action="store_true", help="include notes that have no mela_id yet")
+    p.add_argument("--as-new", dest="as_new", action="store_true", help="mint a fresh id so an edited recipe imports as a second copy")
     p.add_argument("--open", action="store_true", help="hand the staged files to Mela")
     p.set_defaults(func=push)
 

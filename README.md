@@ -13,7 +13,7 @@ That asymmetry is the whole design:
 | Direction | How | Automatic? |
 | --- | --- | --- |
 | Mela → Obsidian | Read a snapshot of the Core Data store, write markdown | Yes — `pull`, on a timer if you want |
-| Obsidian → Mela | Write `.melarecipe` JSON, hand it to Mela | Staged automatically, but Mela's import is a click |
+| Obsidian → Mela | Write `.melarecipe` JSON, hand it to Mela | New recipes only — see below |
 
 ## Commands
 
@@ -52,6 +52,22 @@ So the two commands never fight over the same note, and neither silently discard
 
 Recipes are matched by their Mela `id`, not by filename, so renaming a note in Obsidian does not create a duplicate on the next pull.
 
+## What Mela's import will and will not do
+
+Tested against Mela 2.6.1 with throwaway recipes, because the file-format documentation does not say:
+
+- Importing a `.melarecipe` whose `id` **Mela already holds does nothing at all.** Not an update, not a duplicate, and not an error — the import reports success and the library is unchanged.
+- Importing one with an `id` Mela has **not** seen adds it, even when the title, link, and every other field match an existing recipe exactly.
+
+So `id` is the key Mela dedupes on, and its import is add-only. An edit made in Obsidian to a recipe Mela already has **cannot be delivered as an edit**. `push` therefore refuses to stage those and says which they are, rather than writing a file that imports "successfully" and changes nothing.
+
+Two ways out of that, neither pretty:
+
+- Make the edit in Mela instead, and `pull` it back.
+- `push --as-new` mints a fresh id so the edited version imports as a *second* recipe, which you then reconcile by deleting the old one in Mela.
+
+Recipes that Mela has never seen — a note you wrote in Obsidian — import normally with `push --new`.
+
 ## The note format
 
 Written to match the shape [Recipe View](https://github.com/lachholden/obsidian-recipe-view) and an ordinary reader both handle:
@@ -89,7 +105,6 @@ Mela stores ingredients and instructions as one string per field, newline-separa
 
 ## Things worth knowing before you trust it
 
-- **Whether re-importing updates or duplicates is untested.** Mela identifies a recipe by `id`, and `push` preserves it, so an import *should* update the existing recipe. That is an inference from the file format documentation, not something this repo has verified — and verifying it means writing to a real library that syncs to iCloud. Test it with one throwaway recipe before pushing a batch.
 - **A note without a `mela_id` is never overwritten.** Hand-written notes have no hash to compare against, so they are treated as not ours: if a Mela recipe wants the same filename, it takes a suffixed one instead.
 - **Duplicate ids collapse.** If two recipes in Mela share an `id`, they become one note, and `pull` says how many did.
 - **Repeated titles get a suffix.** A hash of the full id, not a prefix of it — recipe ids are often URLs, so the first characters are the same for everything from one site.
