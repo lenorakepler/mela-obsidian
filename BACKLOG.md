@@ -73,6 +73,30 @@ Recovering the numbers means re-reading the pages. Mela ships a Shortcuts action
 
 If it does move, the third option from the original write-up becomes worth considering: render a readable header back from the properties, so the note still reads like a recipe without the rendered text becoming a second source of truth.
 
+## De-duplicate recipes saved from the same URL
+
+**23 redundant records across 21 URLs.** Mela dedupes on `id`, and for a web recipe the id is the URL — so the same recipe saved from the desktop and from the phone becomes two entries, because the iOS share sheet appends `smid=ck-recipe-iOS-share` and the unlocked-article link appends `unlocked_article_code=…`. Mela sees two different ids and keeps both.
+
+Worst offenders are NYT (7 URLs) and Punch (3); one recipe exists three times. A further 18 titles repeat without matching URLs, which is a different question — some are genuinely different recipes with the same name.
+
+`clean_url()` already strips query strings and fragments; it was written for the calorie refetch. What is missing is the merge: decide which record to keep (the one with photos, the one with cook-log notes, the older `date`), fold anything the others have that it does not, and delete the rest. Deletion means writing through the Core Data path with Mela quit, and it is the one operation in this repo that destroys data rather than adding it — so it wants a dry run that prints exactly what would be merged and dropped, and it should never pick a survivor without showing the choice.
+
+## Pull recipes out of epubs directly
+
+Cookbook recipes are currently transcribed by hand or by OCR, which is where the truncated and unsplit ones come from — `Tempura Scallion Bottoms` lost half its method to a page break, and `Spinach and Tofu Wontons` has its entire method as one 2,266-character line because OCR dropped the step numbering.
+
+**None of that is necessary: an epub is a zip of XHTML.** The text is already structured, with real heading and list markup, so a reader can lift the title, the ingredient list, and the numbered steps as separate fields — no OCR, nothing to re-split, no page boundaries to lose. A skill could take an epub and a recipe name, or walk the whole book, and emit `.melarecipe` JSON or notes directly.
+
+The hard parts are that every publisher marks recipes up differently, and that ingredient groups (`### AIOLI`) are usually a styled paragraph rather than a real heading. Both are per-book problems, which suits a skill that can look at the file and adapt better than a fixed parser would.
+
+### Related: instruction blobs already in the library
+
+21 recipes have an instruction line of 900+ characters. Sentence count separates the two causes: ~20+ sentences on one line is OCR that lost its step boundaries, while `Chinese Leaf Salad` is 1,662 characters and ~7 sentences, which is just a wordy step. Nine recipes also show `towel-it's` and `center-don't`, em dashes flattened to hyphens, which corroborates the OCR origin.
+
+Splitting these is not automatable: the numbering is gone, so a script would have to break on every sentence and turn one step into six. A skill that proposes a split for review is the realistic shape.
+
+Also worth noting: `Shockingly Easy No-Knead Focaccia` is in the library twice with identical instructions.
+
 ## Safety nets
 
 Two independent ones, worth knowing before deciding how carefully to tread.
