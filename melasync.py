@@ -561,8 +561,13 @@ def pull(args):
         if image:
             meta["image"] = image
         # The source is in the body where you want to read it, but a Bases view can only sort and filter on frontmatter, so it lives in both.
+        # A source is often a cookbook, an author, or a restaurant rather than a URL — and a few carry a citation with a URL inside it. Keep the text as written, and pull out a URL separately when there is one so a view can linkify without mangling the rest.
         if recipe.link:
             meta["source"] = recipe.link
+            found = re.search(r"https?://\S+", recipe.link)
+            if found:
+                meta["source_url"] = found.group(0).rstrip(".,;)")
+            meta["source_type"] = "link" if found else "text"
         meta.update(parse_nutrition(recipe.nutrition))
 
         # Mela records that a recipe is flagged, never when it was flagged, so a "want to cook" list can only be ordered by when the recipe was added. Stamp the first sync that sees the flag set and keep that date for as long as it stays set. Keyed on whether the stamp exists rather than on the flag changing, so a flag flipped from a card in Obsidian is stamped on the next pull just the same.
