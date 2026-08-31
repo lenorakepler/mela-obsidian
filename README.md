@@ -18,6 +18,7 @@ That asymmetry is the whole design:
 ## Commands
 
 ```bash
+./melasync.py backup                     # copy the library before anything else
 ./melasync.py status                     # what differs between the two sides
 ./melasync.py pull                       # Mela -> Obsidian
 ./melasync.py pull --images              # also copy each recipe's first photo
@@ -27,6 +28,18 @@ That asymmetry is the whole design:
 ```
 
 The script has a [PEP 723](https://peps.python.org/pep-0723/) header, so `uv run melasync.py` installs its one dependency itself. `--vault` points at the folder of notes; it defaults to `~/vault/Recipes`.
+
+## Backing up first
+
+```bash
+./melasync.py backup                     # ~1 GB, to ~/Documents/Mela Backups/<timestamp>/
+./melasync.py backup --no-images         # ~70 MB, the store alone
+./melasync.py backup --to /Volumes/Ext   # somewhere with more room
+```
+
+Two copies, because they fail differently. The raw `Curcuma.sqlite` (plus its `-wal`, `-shm`, and the `_EXTERNAL_DATA` photos) is byte-exact and restores everything, but only into Mela. The `recipes/*.melarecipe` files are readable JSON that any recipe app can import, which is the copy that still means something if Mela is not there to restore into. Photos are not inlined in the JSON — Mela's format wants them base64-encoded, which would multiply the size for no gain when the originals are sitting in the same folder.
+
+The copied store is opened and run through `PRAGMA integrity_check` before the backup is called done, and the command refuses to start if the volume has less than 1.2x the space it needs.
 
 ## Not clobbering your edits
 

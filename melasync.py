@@ -34,6 +34,7 @@ STORE = GROUP / "Curcuma.sqlite"
 EXTERNAL = GROUP / ".Curcuma_SUPPORT/_EXTERNAL_DATA"
 VAULT = Path.home() / "vault/Recipes"
 OUTBOX = Path.home() / "Documents/Mela Outbox"
+BACKUPS = Path.home() / "Documents/Mela Backups"
 AGENT = Path.home() / "Library/LaunchAgents/com.lenorakepler.melasync.plist"
 
 CORE_DATA_EPOCH = 978307200  # 2001-01-01 UTC, in Unix seconds
@@ -419,6 +420,49 @@ def status(args):
     print(f"status: {len(library)} in Mela, {len(notes) + orphan} notes, {edited} edited since sync, {len(missing)} not yet pulled")
 
 
+def backup(args):
+    """Copy the library twice over: byte-exact, and as portable JSON.
+
+    The raw copy restores everything including photos, but only into Mela. The `.melarecipe` files are readable and importable by other apps, which is the copy that still means something if Mela is not around to restore into.
+    """
+    stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    target = args.to / stamp
+    store_bytes = sum(p.stat().st_size for p in GROUP.glob("Curcuma.sqlite*") if p.is_file())
+    image_bytes = sum(p.stat().st_size for p in EXTERNAL.rglob("*") if p.is_file()) if (args.images and EXTERNAL.is_dir()) else 0
+    needed = store_bytes + image_bytes
+
+    free = shutil.disk_usage(args.to.parent if args.to.exists() else Path.home()).free
+    print(f"backup: {needed / 1e9:.2f} GB to copy, {free / 1e9:.1f} GB free")
+    if free < needed * 1.2:
+        sys.exit("Not enough free space — pass --to on another volume, or --no-images to skip the photos.")
+
+    target.mkdir(parents=True, exist_ok=True)
+    for path in sorted(GROUP.glob("Curcuma.sqlite*")):
+        if path.is_file():
+            shutil.copy2(path, target / path.name)
+    if image_bytes:
+        shutil.copytree(EXTERNAL, target / "_EXTERNAL_DATA", dirs_exist_ok=True)
+
+    check = sqlite3.connect(f"file:{target / 'Curcuma.sqlite'}?mode=ro", uri=True)
+    verdict = check.execute("PRAGMA integrity_check").fetchone()[0]
+    count = check.execute("SELECT COUNT(*) FROM ZRECIPEOBJECT").fetchone()[0]
+    check.close()
+    if verdict != "ok":
+        sys.exit(f"Copied store failed its integrity check: {verdict}")
+
+    exported = target / "recipes"
+    exported.mkdir(exist_ok=True)
+    for recipe in read_library():
+        name = f"{safe_name(recipe.title)} ({digest(recipe.id)}).melarecipe"
+        (exported / name).write_text(json.dumps(to_melarecipe(recipe), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print(f"  store: {store_bytes / 1e6:.0f} MB, integrity ok, {count} recipes")
+    if image_bytes:
+        print(f"  photos: {image_bytes / 1e6:.0f} MB")
+    print(f"  json:  {len(list(exported.iterdir()))} .melarecipe files (no photos inlined)")
+    print(f"  -> {target}")
+
+
 def install_agent(args):
     plist = {
         "Label": "com.lenorakepler.melasync",
@@ -457,6 +501,11 @@ def main():
 
     p = sub.add_parser("status", help="what differs between the two sides")
     p.set_defaults(func=status)
+
+    p = sub.add_parser("backup", help="copy the Mela library, raw and as portable JSON")
+    p.add_argument("--to", type=Path, default=BACKUPS)
+    p.add_argument("--no-images", dest="images", action="store_false", help="skip the 900 MB of photos")
+    p.set_defaults(func=backup)
 
     p = sub.add_parser("install-agent", help="run `pull` periodically via launchd")
     p.add_argument("--interval", type=int, default=900)
