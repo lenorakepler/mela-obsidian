@@ -89,6 +89,16 @@ Neither is a reason to write more freely. Work as though there is no backup and 
 - **Old backups**: `~/Documents/Mela Backups/2026-08-30-203816` (72 MB, store only) is redundant now that `pre-write/` is refreshed before every write. `2026-08-30-201920` (982 MB) is worth keeping — it is the only copy that includes the photos.
 - **Source-field tidying in Mela**, which would otherwise fragment a group-by: `Hettie` vs `Hetty McKinnon`, `Andy Barraghani` vs `Baraghani`, `Justine Dorion` vs `Doiron`, `Big Little Recpies`, a stray backtick in ``Milk Bar Life` ``, `Six Seasons` vs `Six Seasons - Joshua McFadden`, the three spellings of the Momofuku Milk Bar books, and one source that is just `4`.
 
+## Substantial recipe layout wants a plugin, not CSS
+
+`snippets/recipe-note.css` gets full width in all three modes, a floated cover photo, and ingredients beside instructions. That is about where CSS stops being the right tool.
+
+The obstacle is not selector syntax. In reading view a section can be named — `:has(h2[data-heading="Ingredients"])` — but CodeMirror exposes no equivalent, so live preview can only count headings by position, and hand-reordering a note's sections breaks it. Nor can CSS group siblings: ingredients and instructions are flat sibling blocks with a variable number belonging to each, which is why they are floated rather than placed in a grid. Independent scrolling per column, a step-at-a-time mode, quantity scaling, or checking off ingredients are all past the point where more `:has()` helps.
+
+The way through is what [Recipe View](https://github.com/lachholden/obsidian-recipe-view) does: register a view type, parse the markdown, and build the DOM. Total control over layout, nothing fighting CodeMirror, and the same approach already taken for the Bases cards in [obsidian-flex-cards](https://github.com/lenorakepler/obsidian-flex-cards) — where registering a view was likewise the answer to a layout the built-in one could not express.
+
+Worth doing only when the CSS version proves genuinely limiting. It renders read-only, so editing still happens in a normal view.
+
 ## Ideas not started
 
 - **Multi-value editing in Flex Cards.** A list property falls back to read-only, so `categories` cannot be edited from a card. Needs a real token control.
