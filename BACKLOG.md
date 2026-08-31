@@ -147,6 +147,7 @@ Three things to get right:
 
 - **A body URL is not a source URL.** In one sampled clipping the first link in the body was the blog's homepage from its navigation bar, not the recipe. Taking the first URL found would fetch the wrong page and look like it worked. The 1,458 with frontmatter are safe; the 415 are not, without a look.
 - **Some hosts are gone.** `cookinglight.com` (47) and `myrecipes.com` (32) are defunct or redirected, so around 80 will return a homepage rather than a 404 — success-shaped failure. Compare the fetched title against the note's before accepting anything.
+- **A title often names its source, but usually a book.** Of the 1,130 without a frontmatter URL, 393 carry a name after a dash — and the common ones are `Hetty McKinnon (Family)` 40, `Lucky Peach` 15, `Momofuku` 13, `NOPI (Ottolenghi)` 14, `Diana Henry` 12. Those are citations, not addresses, so they are not fetchable; they belong in `source` as text, which is the `source_type: text` case the sync already handles. A minority name a website — `smitten kitchen` and the like — where the title is enough to find the page or reconstruct a slug URL.
 - **Keep the clipping until the fetch is verified.** For the 715 with no URL, and for anything that fails, parsing the existing text is still the fallback.
 
 A workable order:
