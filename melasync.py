@@ -43,7 +43,7 @@ CORE_DATA_EPOCH = 978307200  # 2001-01-01 UTC, in Unix seconds
 FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 ILLEGAL = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 
-SECTIONS = ["Ingredients", "Instructions", "Notes", "Nutrition"]
+SECTIONS = ["Ingredients", "Instructions", "Notes", "Nutrition", "Photos"]
 
 # A cook-log entry is a `### Made <date>` heading in the vault and a bold inline `**Made <date>:**` run in Mela — a heading is the right structure for a note and reads badly in Mela's spacing, and the two sides already differ, so each gets the form that suits it.
 LOG_HEADING = re.compile(r"^###[ \t]*Made[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*:?[ \t]*$", re.M)
@@ -291,7 +291,7 @@ def numbered(block: str) -> str:
     return "\n".join(out)
 
 
-def body_for(recipe: Recipe, image: str | None) -> str:
+def body_for(recipe: Recipe, image: str | None, extra_images: list[str] | None = None) -> str:
     parts = []
     if image:
         parts.append(f"![[{image}]]\n")
@@ -318,6 +318,9 @@ def body_for(recipe: Recipe, image: str | None) -> str:
     ):
         if block.strip():
             parts.append(f"## {heading}\n\n{render(block).strip()}\n")
+
+    if extra_images:
+        parts.append("## Photos\n\n" + "\n".join(f"![[{name}]]" for name in extra_images) + "\n")
 
     return "\n".join(parts).strip() + "\n"
 
@@ -485,16 +488,20 @@ def pull(args):
                     print(f"  conflict (edited in Obsidian, not overwritten): {path.name}")
                     continue
 
-        image = None
+        image, extras = None, []
         if args.images and recipe.images:
             attachments.mkdir(parents=True, exist_ok=True)
-            source = recipe.images[0]
-            data = source.read_bytes() if isinstance(source, Path) else source
-            image = f"{safe_name(recipe.title)}{image_suffix(data[:16])}"
-            (attachments / image).write_bytes(data)
-            image = f"attachments/{image}"
+            for position, source in enumerate(recipe.images):
+                data = source.read_bytes() if isinstance(source, Path) else source
+                stem = safe_name(recipe.title) + ("" if position == 0 else f" {position + 1}")
+                name = f"{stem}{image_suffix(data[:16])}"
+                (attachments / name).write_bytes(data)
+                if position == 0:
+                    image = f"attachments/{name}"
+                else:
+                    extras.append(f"attachments/{name}")
 
-        body = body_for(recipe, image)
+        body = body_for(recipe, image, extras)
         # Mela has learnt nothing since we last handed it this text, so keep the vault's own version of the body — embeds and all — and let only the frontmatter be refreshed below.
         preserved = existing_meta.get("mela_sent") == digest(body)
         if preserved:

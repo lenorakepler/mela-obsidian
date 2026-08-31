@@ -145,7 +145,7 @@ Mela stores ingredients and instructions as one string per field, newline-separa
 - **Repeated titles get a suffix.** A hash of the full id, not a prefix of it — recipe ids are often URLs, so the first characters are the same for everything from one site.
 - **Images are opt-in.** `--images` copies the first photo per recipe into `attachments/`, named by what the bytes actually are. In one library of 1,234 recipes the photos were 990 JPEG, 84 HEIC, 35 PNG, 2 GIF and 1 WebP, so writing them all as `.jpg` gives you a folder of files Obsidian will not display.
 - **`ZRECIPEIMAGEOBJECT.ZDATA` is a tagged blob**, not raw image bytes. A leading `0x01` means the image follows inline; `0x02` means the next 36 characters name a file under `.Curcuma_SUPPORT/_EXTERNAL_DATA`, where Core Data spills the larger ones. Note that `_EXTERNAL_DATA` also holds LZFSE-compressed CloudKit record archives that are not images at all, so the directory cannot be read as a photo folder.
-- **Only the first image is exported**, and `push` never sends images back. Mela's format wants them base64-encoded inline, which makes for enormous files — some of the exported `.melarecipe` files in a full library run to 26 MB.
+- **Every photo is exported.** The first becomes the `image` property, which is what a card view uses as its cover; any others are embedded under a `## Photos` heading at the end of the note. `push` never sends images back. Mela's format wants them base64-encoded inline, which makes for enormous files — some of the exported `.melarecipe` files in a full library run to 26 MB.
 
 ## Reading Mela's library yourself
 
