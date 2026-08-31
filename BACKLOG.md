@@ -87,6 +87,10 @@ Cookbook recipes are currently transcribed by hand or by OCR, which is where the
 
 **None of that is necessary: an epub is a zip of XHTML.** The text is already structured, with real heading and list markup, so a reader can lift the title, the ingredient list, and the numbered steps as separate fields — no OCR, nothing to re-split, no page boundaries to lose. A skill could take an epub and a recipe name, or walk the whole book, and emit `.melarecipe` JSON or notes directly.
 
+**The books are already on disk.** `~/Dropbox/Calibre Library` holds 476 books, 293 of them epub, and it covers most of what the Evernote titles cite — Lucky Peach, Momofuku, NOPI, Start Simple, Dirt Candy, Le Pigeon, Ad Hoc at Home, Kristen Kish Cooking, Superiority Burger, Ottolenghi Simple. Missing from that library, at least: Hetty McKinnon's *Family* (40 notes, the single most-cited), Diana Henry, Morimoto, Frankie Gaw, Nik Sharma. Three further Calibre libraries exist under `Dropbox/Literature`, `Dropbox/Docs/eBooks` and `Dropbox/From lenorakepler directory` whose `metadata.db` would not open — likely Dropbox placeholders rather than empty, so the gaps may close once they are downloaded.
+
+That makes this the other half of the Evernote job: the roughly 350 notes whose titles cite a cookbook are not fetchable from the web, but they are recoverable from these files.
+
 The hard parts are that every publisher marks recipes up differently, and that ingredient groups (`### AIOLI`) are usually a styled paragraph rather than a real heading. Both are per-book problems, which suits a skill that can look at the file and adapt better than a fixed parser would.
 
 ### Related: instruction blobs already in the library
