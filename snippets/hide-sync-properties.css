@@ -1,0 +1,19 @@
+/* Hide sync bookkeeping from the Properties panel.
+
+   `mela_id` is how a note is matched to its recipe and `mela_hash` is how melasync tells an edited note from an untouched one. Neither is yours to edit, and both sit in the properties editor inviting a stray keystroke. Hiding them in the UI does not remove them from the file — the source view and any script still see them, which is what melasync reads. */
+
+.metadata-property[data-property-key="mela_id"],
+.metadata-property[data-property-key="mela_hash"],
+.metadata-property[data-property-key="mela_date_raw"] {
+  display: none;
+}
+
+/* The same fields in Bases table and card views, where they are equally not worth a column. */
+.bases-tr [data-property="note.mela_id"],
+.bases-tr [data-property="note.mela_hash"],
+.bases-tr [data-property="note.mela_date_raw"],
+.flex-cards-property[data-property="note.mela_id"],
+.flex-cards-property[data-property="note.mela_hash"],
+.flex-cards-property[data-property="note.mela_date_raw"] {
+  display: none;
+}

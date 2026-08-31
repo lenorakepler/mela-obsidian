@@ -29,6 +29,10 @@ That asymmetry is the whole design:
 
 The script has a [PEP 723](https://peps.python.org/pep-0723/) header, so `uv run melasync.py` installs its one dependency itself. `--vault` points at the folder of notes; it defaults to `~/vault/Recipes`.
 
+## Keeping the bookkeeping out of your way
+
+`mela_id`, `mela_hash`, and `mela_date_raw` are machinery, and the Properties panel invites a stray keystroke into them. `snippets/hide-sync-properties.css` hides all three from the properties editor and from Bases table and card views. It hides them from the UI only — the file still carries them, which is what this tool reads.
+
 ## Backing up first
 
 ```bash
@@ -47,6 +51,7 @@ Every note carries a `mela_hash` — the hash of the body as it stood at the las
 
 - A note whose body still matches its hash has not been touched in Obsidian. `pull` may overwrite it freely.
 - A note whose body no longer matches has been edited. `pull` leaves it alone and says so; `push` treats it as the thing to send.
+- A note carrying a `mela_id` but **no** `mela_hash` is in an unknown state, and is treated as edited rather than as fresh. Deleting the hash by accident should not be a way to lose the note's contents.
 
 So the two commands never fight over the same note, and neither silently discards work. `pull --force` overrides this if you want Mela to win.
 
@@ -101,7 +106,7 @@ Servings: Makes 6 servings
 1. Preheat oven to 350°F. Pour 6 cups water into a 13x9x2-inch glass baking dish.
 ```
 
-Mela stores ingredients and instructions as one string per field, newline-separated, with a leading `#` marking a group heading. Those become a bulleted list, a numbered list, and `###` headings; `push` converts them back. `Source`, `Servings`, `Prep`, `Cook`, and `Total` live in the body rather than the frontmatter, because that is where you want to read them — `push` parses them back out of those lines.
+Mela stores ingredients and instructions as one string per field, newline-separated, with a leading `#` marking a group heading. Those become a bulleted list, a numbered list, and `###` headings; `push` converts them back, dropping any task checkbox it finds — `- [x] 2 eggs` is a cooking state, not an ingredient named `[x] 2 eggs`. `Source`, `Servings`, `Prep`, `Cook`, and `Total` live in the body rather than the frontmatter, because that is where you want to read them — `push` parses them back out of those lines.
 
 ## Things worth knowing before you trust it
 

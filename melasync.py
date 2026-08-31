@@ -1,11 +1,11 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pyyaml"]
+# dependencies = ["pyyaml", "pyobjc-framework-CoreData", "pyobjc-framework-Cocoa"]
 # ///
 """Sync recipes between Mela and an Obsidian vault.
 
-Mela keeps its library in a Core Data store that NSPersistentCloudKitContainer mirrors to iCloud. Reading it is safe and complete; writing to it behind Mela's back would desynchronise that mirror, so this only ever reads. The write direction goes out as `.melarecipe` JSON — the format Mela documents and imports — and Mela pulls it in.
+Mela keeps its library in a Core Data store that NSPersistentCloudKitContainer mirrors to iCloud. Reading it is straightforward. Writing has two routes: `.melarecipe` JSON that Mela imports, which cannot update a recipe it already holds, and — with `push --write` — a Core Data save against the store itself, which can. That save records the same persistent history Mela's own edits do, and the mirror exports it on Mela's next launch under Mela's entitlements.
 
 Each note records the hash of the body it was last synced with, which is what makes the two directions safe to run repeatedly: a note whose body no longer matches its hash has been edited in Obsidian, so a pull leaves it alone and a push sends it.
 """
@@ -32,6 +32,7 @@ import yaml
 GROUP = Path.home() / "Library/Group Containers/66JC38RDUD.recipes.mela/Data"
 STORE = GROUP / "Curcuma.sqlite"
 EXTERNAL = GROUP / ".Curcuma_SUPPORT/_EXTERNAL_DATA"
+MOMD = Path("/Applications/Mela.app/Contents/Resources/Mela.momd")
 VAULT = Path.home() / "vault/Recipes"
 OUTBOX = Path.home() / "Documents/Mela Outbox"
 BACKUPS = Path.home() / "Documents/Mela Backups"
@@ -153,6 +154,92 @@ def to_melarecipe(recipe: Recipe) -> dict:
     }
 
 
+def matching_model_url():
+    """Find the model version in Mela's bundle whose hashes match this store.
+
+    Loading the wrong one either fails or, worse, migrates the store. Core Data records the hashes it was created with, so match on those rather than trusting `NSManagedObjectModel_CurrentVersionName` — the current version is only the right one until Mela ships a new one.
+    """
+    db = sqlite3.connect(f"file:{STORE}?mode=ro", uri=True)
+    store_hashes = plistlib.loads(bytes(db.execute("SELECT Z_PLIST FROM Z_METADATA").fetchone()[0]))["NSStoreModelVersionHashes"]
+    db.close()
+    info = plistlib.loads((MOMD / "VersionInfo.plist").read_bytes())
+    for name, hashes in info["NSManagedObjectModel_VersionHashes"].items():
+        if hashes == store_hashes:
+            return MOMD / f"{name}.mom"
+    sys.exit("No model version in Mela.app matches this store — Mela has probably been updated. Refusing to guess.")
+
+
+def write_to_mela(recipes, dry_run=False):
+    """Update Mela's own store through Core Data, which is what makes edits sync.
+
+    Mela's import cannot update an existing recipe, but its CloudKit mirror does not care who wrote a change: it reads Core Data's persistent history and exports anything newer than what it last sent. A save made here records the same ATRANSACTION and ACHANGE rows Mela's own edit does, with no process identity attached to either, so Mela picks it up on next launch and uploads it under its own entitlements.
+
+    Raw SQL would not do — it changes the row while writing no history, so the mirror never learns and the edit is silently local.
+    """
+    import CoreData
+    import Foundation
+
+    if subprocess.run(["pgrep", "-x", "Mela"], capture_output=True).returncode == 0:
+        sys.exit("Quit Mela first. It holds the store open, and a change it never observed can be lost when it next saves.")
+
+    model = CoreData.NSManagedObjectModel.alloc().initWithContentsOfURL_(
+        Foundation.NSURL.fileURLWithPath_(str(matching_model_url())))
+    container = CoreData.NSPersistentContainer.alloc().initWithName_managedObjectModel_("Curcuma", model)
+    desc = CoreData.NSPersistentStoreDescription.alloc().initWithURL_(
+        Foundation.NSURL.fileURLWithPath_(str(STORE)))
+    desc.setOption_forKey_(Foundation.NSNumber.numberWithBool_(True), CoreData.NSPersistentHistoryTrackingKey)
+    # A silent migration of a live library is the one outcome worth crashing to avoid.
+    desc.setShouldMigrateStoreAutomatically_(False)
+    desc.setShouldInferMappingModelAutomatically_(False)
+    container.setPersistentStoreDescriptions_([desc])
+
+    failed = []
+    container.loadPersistentStoresWithCompletionHandler_(lambda store, error: error and failed.append(error))
+    if failed:
+        sys.exit(f"Could not open Mela's store: {failed[0]}")
+    ctx = container.viewContext()
+
+    def fetch_one(entity, key, value):
+        request = CoreData.NSFetchRequest.fetchRequestWithEntityName_(entity)
+        request.setPredicate_(Foundation.NSPredicate.predicateWithFormat_(f"{key} == %@", value))
+        found, _ = ctx.executeFetchRequest_error_(request, None)
+        return found[0] if found else None
+
+    updated = created = 0
+    for recipe in recipes:
+        row = fetch_one("RecipeObject", "id", recipe.id)
+        if row is None:
+            row = CoreData.NSEntityDescription.insertNewObjectForEntityForName_inManagedObjectContext_("RecipeObject", ctx)
+            row.setValue_forKey_(recipe.id, "id")
+            row.setValue_forKey_(Foundation.NSDate.date(), "date")
+            created += 1
+        else:
+            updated += 1
+        for key, value in (("title", recipe.title), ("text", recipe.text), ("link", recipe.link),
+                           ("yield", recipe.yield_), ("prepTime", recipe.prep_time),
+                           ("cookTime", recipe.cook_time), ("totalTime", recipe.total_time),
+                           ("ingredients", recipe.ingredients), ("instructions", recipe.instructions),
+                           ("notes", recipe.notes), ("nutrition", recipe.nutrition)):
+            row.setValue_forKey_(value, key)
+        if recipe.categories:
+            tags = [fetch_one("RecipeTag", "title", name)
+                    or CoreData.NSEntityDescription.insertNewObjectForEntityForName_inManagedObjectContext_("RecipeTag", ctx)
+                    for name in recipe.categories]
+            for tag, name in zip(tags, recipe.categories):
+                tag.setValue_forKey_(name, "title")
+            row.setValue_forKey_(Foundation.NSSet.setWithArray_(tags), "tags")
+
+    if dry_run:
+        ctx.rollback()
+        print(f"  would update {updated} and create {created} (rolled back)")
+        return updated, created
+
+    ok, error = ctx.save_(None)
+    if not ok:
+        sys.exit(f"Save failed, nothing written: {error}")
+    return updated, created
+
+
 # ------------------------------------------------------------ Markdown side
 
 
@@ -177,7 +264,8 @@ def unbullets(block: str) -> str:
         if line.startswith("#"):
             lines.append("#" + re.sub(r"^#+\s*", "", line))
         else:
-            lines.append(re.sub(r"^(?:[-*+]|\d+\.)\s+", "", line))
+            # Drop the list marker, and a task checkbox with it: `- [x] 2 eggs` is a cooking state, not an ingredient called "[x] 2 eggs".
+            lines.append(re.sub(r"^(?:[-*+]|\d+\.)\s+(?:\[[ xX/-]\]\s*)?", "", line))
     return "\n".join(lines).strip()
 
 
@@ -346,8 +434,8 @@ def pull(args):
         existing_meta, existing_body = ({}, "")
         if path.exists():
             existing_meta, existing_body = parse_note(path.read_text(encoding="utf-8"))
-            if existing_meta.get("mela_hash") and digest(existing_body) != existing_meta["mela_hash"]:
-                # Edited in Obsidian since the last sync. Overwriting would silently discard that edit.
+            if not existing_meta.get("mela_hash") or digest(existing_body) != existing_meta["mela_hash"]:
+                # Edited in Obsidian since the last sync — or missing the hash entirely, which says the same thing less precisely. Overwriting either would silently discard work.
                 conflicts += 1
                 if not args.force:
                     print(f"  conflict (edited in Obsidian, not overwritten): {path.name}")
@@ -391,9 +479,11 @@ def push(args):
     """
     args.outbox.mkdir(parents=True, exist_ok=True)
     known = {r.id for r in read_library()}
-    staged, blocked = [], []
+    staged, blocked, direct = [], [], []
 
     for path in sorted(args.vault.glob("*.md")):
+        if args.only and args.only.lower() not in path.name.lower():
+            continue
         meta, body = parse_note(path.read_text(encoding="utf-8"))
         mela_id = str(meta.get("mela_id") or "")
         if mela_id and meta.get("mela_hash") == digest(body) and not args.all:
@@ -403,6 +493,11 @@ def push(args):
 
         recipe = note_to_recipe(meta, body)
         recipe.title = recipe.title or path.stem
+        if args.write:
+            if not recipe.id:
+                recipe.id = f"obsidian-{digest(path.stem + body)}"
+            direct.append((path, recipe))
+            continue
         if mela_id in known and not args.as_new:
             blocked.append(path)
             continue
@@ -411,6 +506,30 @@ def push(args):
         out = args.outbox / f"{safe_name(recipe.title)}.melarecipe"
         out.write_text(json.dumps(to_melarecipe(recipe), ensure_ascii=False, indent=2), encoding="utf-8")
         staged.append(out)
+
+    if args.write:
+        if not direct:
+            print("push: nothing to write")
+            return
+        print(f"push --write: {len(direct)} recipe(s) into Mela's own store")
+        for path, _ in direct[:10]:
+            print(f"  {path.name}")
+        if len(direct) > 10:
+            print(f"  ... and {len(direct) - 10} more")
+        if not args.dry_run:
+            # A write to the live library is worth 70 MB of insurance every time, not only the first time someone remembers. One slot, overwritten — the useful copy is the one from immediately before this write, and a pile of them is just disk.
+            snapshot = BACKUPS / "pre-write"
+            shutil.rmtree(snapshot, ignore_errors=True)
+            snapshot.mkdir(parents=True, exist_ok=True)
+            for p in sorted(GROUP.glob("Curcuma.sqlite*")):
+                if p.is_file():
+                    shutil.copy2(p, snapshot / p.name)
+            print(f"  backed the store up to {snapshot}")
+        updated, created = write_to_mela([r for _, r in direct], dry_run=args.dry_run)
+        if not args.dry_run:
+            print(f"  updated {updated}, created {created}")
+            print("  launch Mela and leave it frontmost; it exports the change on next run")
+        return
 
     print(f"push: {len(staged)} staged -> {args.outbox}")
     for path in staged:
@@ -530,6 +649,9 @@ def main():
     p.add_argument("--all", action="store_true", help="stage every note, not only edited ones")
     p.add_argument("--new", action="store_true", help="include notes that have no mela_id yet")
     p.add_argument("--as-new", dest="as_new", action="store_true", help="mint a fresh id so an edited recipe imports as a second copy")
+    p.add_argument("--write", action="store_true", help="write into Mela's store directly, updating recipes in place (Mela must be quit)")
+    p.add_argument("--dry-run", action="store_true", help="with --write, do the work and roll it back")
+    p.add_argument("--only", help="restrict to notes whose filename contains this")
     p.add_argument("--open", action="store_true", help="hand the staged files to Mela")
     p.set_defaults(func=push)
 
