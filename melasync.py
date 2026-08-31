@@ -462,7 +462,9 @@ def pull(args):
             "mela_date_raw": recipe.date,
             "mela_hash": digest(body),
         }
-        if existing_body.strip() == body.strip() and existing_meta.get("mela_hash") == meta["mela_hash"]:
+        if image:
+            meta["image"] = image
+        if existing_body.strip() == body.strip() and dict(existing_meta) == meta:
             skipped += 1
             continue
         front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=10**9)
