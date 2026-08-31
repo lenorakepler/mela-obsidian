@@ -73,6 +73,36 @@ Two ways out of that, neither pretty:
 
 Recipes that Mela has never seen — a note you wrote in Obsidian — import normally with `push --new`.
 
+## Cook logs
+
+A note in the recipe's Notes field that records *making* it — the date, what you changed, whether it worked — is a different kind of thing from a storage tip, and worth being able to read on its own. So each one becomes its own note under `Recipes/Cook Log/`, embedded back into the recipe:
+
+```markdown
+---
+recipe: "[[Carrot Peanut Satay Ramen]]"
+date: 2026-03-23
+tags: [cook-log]
+---
+
+Everyone really loved this. Roasted double the carrots at 425 before the pan.
+```
+
+and in the recipe, under `## Notes`:
+
+```markdown
+![[2026-03-23 Carrot Peanut Satay Ramen]]
+
+Storage: keeps 3 days refrigerated.
+```
+
+The two sides take the form that suits them. In the vault an entry is a `### Made 2026-03-23` heading, which folds, appears in the outline, and nests correctly under `## Notes`. Mela gets `**Made 2026-03-23:** ` inline, because a heading reads badly in its line spacing. `push` expands embeds and converts heading to bold; `pull` converts back.
+
+`split-logs` migrates entries already written by hand. It only touches lines opening with a date-shaped marker, so storage tips, make-ahead instructions and quoted reviews stay exactly where they are. Run it with `--dry-run` first; an entry whose date has no year is reported and left alone, since there is nothing to date it by.
+
+### How pull avoids flattening the embeds
+
+Push sends Mela flat text, so a later pull regenerating the note from that text would replace every embed with the words it expanded to. Each note therefore records `mela_sent`, the hash of what Mela was last given. If a pull rebuilds exactly that, Mela has learnt nothing since the push, and the note is left alone — embeds intact. Only a genuine change on Mela's side is written back.
+
 ## The note format
 
 Written to match the shape [Recipe View](https://github.com/lachholden/obsidian-recipe-view) and an ordinary reader both handle:

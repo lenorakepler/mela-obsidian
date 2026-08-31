@@ -35,6 +35,7 @@ EXTERNAL = GROUP / ".Curcuma_SUPPORT/_EXTERNAL_DATA"
 MOMD = Path("/Applications/Mela.app/Contents/Resources/Mela.momd")
 VAULT = Path.home() / "vault/Recipes"
 OUTBOX = Path.home() / "Documents/Mela Outbox"
+LOG_DIRNAME = "Cook Log"
 BACKUPS = Path.home() / "Documents/Mela Backups"
 AGENT = Path.home() / "Library/LaunchAgents/com.lenorakepler.melasync.plist"
 
@@ -43,6 +44,13 @@ FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 ILLEGAL = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 
 SECTIONS = ["Ingredients", "Instructions", "Notes", "Nutrition"]
+
+# A cook-log entry is a `### Made <date>` heading in the vault and a bold inline `**Made <date>:**` run in Mela — a heading is the right structure for a note and reads badly in Mela's spacing, and the two sides already differ, so each gets the form that suits it.
+LOG_HEADING = re.compile(r"^###[ \t]*Made[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*:?[ \t]*$", re.M)
+LOG_BOLD = re.compile(r"^\*\*Made[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*:?\*\*[ \t]*", re.M)
+EMBED = re.compile(r"^!\[\[([^\]|#]+?)\]\]$")
+# What a legacy hand-written entry looks like, for `split-logs` to migrate.
+LEGACY = re.compile(r"^(?:\*\*)?\s*(?:Made|Cooked|Baked)?\s*[:]?\s*(\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?|\d{4}-\d{2}-\d{2})\s*[:.\-\u2013]\s*(?:\*\*)?\s*", re.I)
 
 
 @dataclass
@@ -305,13 +313,46 @@ def body_for(recipe: Recipe, image: str | None) -> str:
     for heading, block, render in (
         ("Ingredients", recipe.ingredients, bullets),
         ("Instructions", recipe.instructions, numbered),
-        ("Notes", recipe.notes, lambda b: b.strip()),
+        ("Notes", recipe.notes, lambda b: collapse_notes(b).strip()),
         ("Nutrition", recipe.nutrition, lambda b: b.strip()),
     ):
         if block.strip():
             parts.append(f"## {heading}\n\n{render(block).strip()}\n")
 
     return "\n".join(parts).strip() + "\n"
+
+
+def log_dir(vault: Path) -> Path:
+    return vault / LOG_DIRNAME
+
+
+def expand_notes(text: str, vault: Path) -> str:
+    """Turn the vault's Notes section into the flat string Mela stores.
+
+    An embed becomes the log note's text, headed by the bold run Mela renders tidily; a `### Made` heading written inline becomes the same thing. Everything else — the storage tips and quoted reviews that make up most of these fields — is passed through untouched.
+    """
+    lines = []
+    for line in text.split("\n"):
+        embed = EMBED.match(line.strip())
+        if not embed:
+            lines.append(line)
+            continue
+        entry = log_dir(vault) / f"{embed.group(1).strip()}.md"
+        if not entry.exists():
+            lines.append(line)
+            continue
+        meta, body = parse_note(entry.read_text(encoding="utf-8"))
+        date = meta.get("date")
+        body = body.strip()
+        lines.append(f"**Made {date}:** {body}" if date else body)
+    joined = "\n".join(lines)
+    # A heading owns the text under it, so pull that text up onto the bold run rather than leaving a stranded line.
+    return LOG_HEADING.sub(lambda m: f"**Made {m.group(1)}:**", joined).replace(":**\n\n", ":** ").replace(":**\n", ":** ")
+
+
+def collapse_notes(text: str) -> str:
+    """The reverse, for a Notes field arriving from Mela: bold run back to a heading."""
+    return LOG_BOLD.sub(lambda m: f"### Made {m.group(1)}\n\n", text)
 
 
 def parse_note(text: str) -> tuple[dict, str]:
@@ -321,7 +362,7 @@ def parse_note(text: str) -> tuple[dict, str]:
     return yaml.safe_load(match.group(1)) or {}, text[match.end():]
 
 
-def note_to_recipe(meta: dict, body: str) -> Recipe:
+def note_to_recipe(meta: dict, body: str, vault: Path | None = None) -> Recipe:
     """Read a note back into recipe fields, mirroring `body_for`."""
     sections: dict[str, str] = {}
     current, buffer = None, []
@@ -361,7 +402,7 @@ def note_to_recipe(meta: dict, body: str) -> Recipe:
         total_time=line_value("Total"),
         ingredients=unbullets(sections.get("Ingredients", "")),
         instructions=unbullets(sections.get("Instructions", "")),
-        notes=sections.get("Notes", "").strip(),
+        notes=(expand_notes(sections.get("Notes", ""), vault) if vault else sections.get("Notes", "")).strip(),
         nutrition=sections.get("Nutrition", "").strip(),
         categories=list(meta.get("categories") or []),
         favorite=bool(meta.get("favorite")),
@@ -451,6 +492,10 @@ def pull(args):
             image = f"attachments/{image}"
 
         body = body_for(recipe, image)
+        # This recipe is exactly what we last pushed, so Mela has learnt nothing since. Regenerating the note would flatten its embeds back into the plain text we sent.
+        if existing_meta.get("mela_sent") == digest(body):
+            skipped += 1
+            continue
         meta = {
             "title": recipe.title,
             "cssclasses": ["recipe"],
@@ -493,7 +538,7 @@ def push(args):
         if not mela_id and not args.new:
             continue
 
-        recipe = note_to_recipe(meta, body)
+        recipe = note_to_recipe(meta, body, args.vault)
         recipe.title = recipe.title or path.stem
         if args.write:
             if not recipe.id:
@@ -529,6 +574,14 @@ def push(args):
             print(f"  backed the store up to {snapshot}")
         updated, created = write_to_mela([r for _, r in direct], dry_run=args.dry_run)
         if not args.dry_run:
+            for path, recipe in direct:
+                meta, body = parse_note(path.read_text(encoding="utf-8"))
+                meta["mela_id"] = recipe.id
+                meta["mela_hash"] = digest(body)
+                # What Mela holds now. A pull that regenerates this same text has learnt nothing new, and must leave the note — and its embeds — alone.
+                meta["mela_sent"] = digest(body_for(recipe, meta.get("image")))
+                front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=10**9)
+                path.write_text(f"---\n{front}---\n\n{body.lstrip()}", encoding="utf-8")
             print(f"  updated {updated}, created {created}")
             print("  launch Mela and leave it frontmost; it exports the change on next run")
         return
@@ -549,6 +602,80 @@ def push(args):
         print("\n  handed to Mela; confirm each import, then re-run `pull` to pick up the new ids")
     elif staged:
         print("\n  run again with --open to hand them to Mela, or drag them onto its window")
+
+
+def iso_date(text: str) -> str | None:
+    """Normalise the date shapes actually present in the notes. A two-digit year is 20xx — these are cooking logs, not archaeology."""
+    text = text.strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return text
+    m = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?", text)
+    if not m:
+        return None
+    month, day, year = m.group(1), m.group(2), m.group(3)
+    if year is None:
+        return None  # A year-less entry cannot be dated; leave it for a human.
+    year = int(year)
+    year += 2000 if year < 100 else 0
+    return f"{year:04d}-{int(month):02d}-{int(day):02d}"
+
+
+def split_logs(args):
+    """Lift dated entries out of each recipe's Notes into their own notes, embedded back in.
+
+    Only lines that open with a date-shaped marker are touched. The storage tips, make-ahead instructions and quoted reviews that make up most of these fields have no such marker and are left exactly where they are.
+    """
+    logs = log_dir(args.vault)
+    moved = skipped_undated = 0
+    touched = []
+
+    for path in sorted(args.vault.glob("*.md")):
+        meta, body = parse_note(path.read_text(encoding="utf-8"))
+        if "## Notes" not in body:
+            continue
+        head, _, rest = body.partition("## Notes\n")
+        notes, sep, tail = rest.partition("\n## ")
+
+        out, entries = [], []
+        for line in notes.split("\n"):
+            m = LEGACY.match(line)
+            if not m:
+                out.append(line)
+                continue
+            date = iso_date(m.group(1))
+            if not date:
+                skipped_undated += 1
+                out.append(line)
+                continue
+            entries.append((date, line[m.end():].strip()))
+            out.append(f"!!ENTRY{len(entries) - 1}!!")
+
+        if not entries:
+            continue
+
+        for i, (date, text) in enumerate(entries):
+            name = f"{date} {safe_name(path.stem)}"
+            out = [f"![[{name}]]" if line == f"!!ENTRY{i}!!" else line for line in out]
+            if not args.dry_run:
+                logs.mkdir(parents=True, exist_ok=True)
+                front = yaml.safe_dump({"recipe": f"[[{path.stem}]]", "date": date, "tags": ["cook-log"]},
+                                       sort_keys=False, allow_unicode=True, width=10**9)
+                (logs / f"{name}.md").write_text(f"---\n{front}---\n\n{text}\n", encoding="utf-8")
+            moved += 1
+
+        touched.append((path.name, len(entries)))
+        if not args.dry_run:
+            new_body = head + "## Notes\n" + "\n".join(out) + (sep + tail if sep else "")
+            meta["mela_hash"] = digest(new_body)
+            front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=10**9)
+            path.write_text(f"---\n{front}---\n\n{new_body.lstrip()}", encoding="utf-8")
+
+    for name, count in touched:
+        print(f"  {count} entr{'ies' if count > 1 else 'y '}  {name}")
+    print(f"split-logs: {moved} entr{'ies' if moved != 1 else 'y'} from {len(touched)} recipe(s) -> {logs}"
+          f"{' (dry run)' if args.dry_run else ''}")
+    if skipped_undated:
+        print(f"  {skipped_undated} dated line(s) had no year and were left in place")
 
 
 def status(args):
@@ -656,6 +783,10 @@ def main():
     p.add_argument("--only", help="restrict to notes whose filename contains this")
     p.add_argument("--open", action="store_true", help="hand the staged files to Mela")
     p.set_defaults(func=push)
+
+    p = sub.add_parser("split-logs", help="lift dated Notes entries into their own cook-log notes")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=split_logs)
 
     p = sub.add_parser("status", help="what differs between the two sides")
     p.set_defaults(func=status)
