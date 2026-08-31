@@ -152,7 +152,18 @@ Three things to get right:
 - **A body URL is not a source URL.** In one sampled clipping the first link in the body was the blog's homepage from its navigation bar, not the recipe. Taking the first URL found would fetch the wrong page and look like it worked. The 1,458 with frontmatter are safe; the 415 are not, without a look.
 - **Some hosts are gone.** `cookinglight.com` (47) and `myrecipes.com` (32) are defunct or redirected, so around 80 will return a homepage rather than a 404 — success-shaped failure. Compare the fetched title against the note's before accepting anything.
 - **A title often names its source, but usually a book.** Of the 1,130 without a frontmatter URL, 393 carry a name after a dash — and the common ones are `Hetty McKinnon (Family)` 40, `Lucky Peach` 15, `Momofuku` 13, `NOPI (Ottolenghi)` 14, `Diana Henry` 12. Those are citations, not addresses, so they are not fetchable; they belong in `source` as text, which is the `source_type: text` case the sync already handles. A minority name a website — `smitten kitchen` and the like — where the title is enough to find the page or reconstruct a slug URL.
-- **Some notes are photographs, not text.** 84 hold under 60 words of prose and one or more page photos — `Halloumi, Kale, and Mint Gozleme - Hetty McKinnon (Family)` is literally `![[IMG_7600.jpeg]]![[IMG_7601.jpeg]]` and nothing else. A further 252 have images and only 60–200 words, which look like transcriptions that stalled part-way. These are photographs of physical cookbooks that have no epub and no URL, so neither of the routes above reaches them; they need the page read. The images are `.jpeg`, converted from HEIC somewhere in the Evernote export, and sit in the `_resources` directory beside the note. `Family` is the most-cited book in the whole collection at 40 notes and is exactly this case.
+- **Some notes are photographs, not text.** 84 hold under 60 words of prose and one or more page photos — `Halloumi, Kale, and Mint Gozleme - Hetty McKinnon (Family)` is literally `![[IMG_7600.jpeg]]![[IMG_7601.jpeg]]` and nothing else. A further 252 have images and only 60–200 words, which look like transcriptions that stalled part-way. These are photographs of physical cookbooks that have no epub and no URL, so neither of the routes above reaches them; they need the page read. The images are `.jpeg`, converted from HEIC somewhere in the Evernote export.
+
+**Some of those images did not survive the trip into the vault, but Dropbox still has them.** The vault's `_resources` directories hold images directly; the Dropbox copies keep an extra level, a per-note `<Note_Name>.resources/` folder, and the flattening lost files along the way:
+
+```
+~/Dropbox/Evernote/Food/Main - PizzaPastaRisotto/_resources/
+    Halloumi,_Kale,_and_Mint_Gozleme_-_Hetty_McKinnon_(Family).resources/IMG_7600.jpeg
+```
+
+Across the 336 photo-dependent notes: 324 images are present in the vault, 101 are missing but recoverable from `~/Dropbox/Evernote/Food` or `~/Dropbox/vault/Evernote/Food`, and 55 are not findable anywhere. So a copy pass restores most of the gap before any reading begins.
+
+Vault-wide the notes carry 16,893 image references and 7,580 do not resolve, but that number is misleading: 7,130 of the failures are SVGs, extensionless files and `.bin` — the site iconography that would be discarded anyway. Only about 450 broken references are real photographs, and they are the recoverable ones. `Family` is the most-cited book in the whole collection at 40 notes and is exactly this case.
 - **Keep the clipping until the fetch is verified.** For the 715 with no URL, and for anything that fails, parsing the existing text is still the fallback.
 
 A workable order:
