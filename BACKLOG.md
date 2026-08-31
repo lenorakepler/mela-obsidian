@@ -73,6 +73,14 @@ Recovering the numbers means re-reading the pages. Mela ships a Shortcuts action
 
 If it does move, the third option from the original write-up becomes worth considering: render a readable header back from the properties, so the note still reads like a recipe without the rendered text becoming a second source of truth.
 
+## Safety nets
+
+Two independent ones, worth knowing before deciding how carefully to tread.
+
+**The Mela side** is covered by `backup`, and by the single `pre-write/` snapshot that `push --write` refreshes before every write. That protects the recipe library and its photos.
+
+**The vault side** is covered by Obsidian Sync, which keeps version history and deleted-file history server-side. A note overwritten or deleted locally can be restored from Obsidian's own history, including its original timestamps — so "the local file is gone" is not the same as "the data is gone", and it is worth checking there before concluding anything is unrecoverable.
+
 ## Housekeeping
 
 - **Delete the test recipes in Mela**: `ZZ Melasync Test Recipe (delete me)`, `ZZ Melasync Test Recipe B (delete me)`, and the `Melasync Test` category. Then `pull`, and remove their notes plus `Recipes/Cook Log/2026-08-30 ZZ Melasync Test Recipe (delete me).md` from the vault.
