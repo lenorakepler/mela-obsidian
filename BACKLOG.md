@@ -112,7 +112,9 @@ What a sample of them looks like:
 | Bare link-only lines, the shape a stripped nav bar leaves | 726 |
 | Over 12,000 characters | 250 |
 
-Only about a fifth have recipe structure a parser could latch onto. But the notes carry Evernote tags, and two of them do the triage that no classifier could:
+**Nearly all of these are recipes.** Only 575 use an `## Ingredients` heading, but that measures formatting, not content: sampling the rest turns up `INGREDIENTS` in bare capitals, a `Serves 4` line followed straight by the ingredients, and web clips where the recipe is buried under the site's navigation. A handful are indexes or lists. So this is an extraction and cleanup problem across roughly 2,700 recipes, not a question of which ones are recipes.
+
+The notes also carry their Evernote tags, and two of them are useful for ordering the work:
 
 | Tag | Notes | Already in Mela |
 | --- | --- | --- |
@@ -121,11 +123,11 @@ Only about a fifth have recipe structure a parser could latch onto. But the note
 
 `Transferred` is reliable — matching on titles normalised for the site suffixes Evernote appended (`- BA`, `TASTE`, `| Serious Eats`), 43 of 57 are confirmed present, and the misses are junk titles like `Untitled Note` rather than failures of the tag. Use it to exclude.
 
-**`Made` is where to start.** 386 notes marked as actually cooked, and only 29 of them are in Mela — so roughly 357 recipes she has made and kept are sitting unimported. That is a better selection than any heuristic could produce, because it is a record of what was worth cooking rather than a guess at what looks like a recipe. Doing those first turns a 2,750-note triage into a 357-note extraction job, and leaves the rest to be decided later or not at all.
+**`Made` is where to start.** 386 notes marked as actually cooked, and only 29 of them are in Mela — so roughly 357 recipes she has made and kept are sitting unimported. Not because the rest are doubtful, but because these are the ones already known to be worth the trouble, which makes them the right batch to shake the extraction out on before running it across all 2,700.
 
 A workable order:
 
-1. **Classify.** Recipe, recipe-adjacent (an article that contains one), or not a recipe. Cheap signals first — an ingredient-shaped list, a quantity vocabulary, a `## Directions` heading — then read the ambiguous remainder.
+1. **Recognise the shape.** Not "is this a recipe" but "where does the recipe start". The formats seen so far: a `## Ingredients` heading (575), bare `INGREDIENTS` capitals, a yield line followed directly by ingredients, and a full page clip with the recipe somewhere inside it. A quantity-dense run of short lines is the signal that survives all four.
 2. **Strip the page.** The clipped clutter is regular enough to be worth a pass of its own: link-only lines, known marketing phrases, icon images. `verbatim_clean`'s host-profile approach in the job-search repo is the same problem solved once already.
 3. **Extract.** Title, ingredients, steps into the same shape `pull` writes, so they can join the vault as ordinary recipe notes.
 4. **De-duplicate against Mela's 1,235.** Some fraction of these were later re-saved into Mela properly, and importing them again would undo the work in the section above. Match on normalised source URL first, title second.
