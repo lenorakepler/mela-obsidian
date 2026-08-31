@@ -77,6 +77,7 @@ Mela stores ingredients and instructions as one string per field, newline-separa
 ## Things worth knowing before you trust it
 
 - **Whether re-importing updates or duplicates is untested.** Mela identifies a recipe by `id`, and `push` preserves it, so an import *should* update the existing recipe. That is an inference from the file format documentation, not something this repo has verified — and verifying it means writing to a real library that syncs to iCloud. Test it with one throwaway recipe before pushing a batch.
+- **A note without a `mela_id` is never overwritten.** Hand-written notes have no hash to compare against, so they are treated as not ours: if a Mela recipe wants the same filename, it takes a suffixed one instead.
 - **Duplicate ids collapse.** If two recipes in Mela share an `id`, they become one note, and `pull` says how many did.
 - **Repeated titles get a suffix.** A hash of the full id, not a prefix of it — recipe ids are often URLs, so the first characters are the same for everything from one site.
 - **Images are opt-in.** `--images` copies the first photo per recipe into `attachments/`. Core Data keeps large images as separate files and small ones inline in the row; both are handled.

@@ -318,9 +318,12 @@ def pull(args):
         path = index.get(recipe.id)
         if path is None:
             base = vault / f"{safe_name(recipe.title)}.md"
+            # A file at this path belongs to us only if it carries this recipe's id. A note with no `mela_id` was written by hand and has never been synced, so it is not ours to overwrite — take a different name and leave it alone.
+            occupied = claimed.get(base, recipe.id) != recipe.id
+            if not occupied and base.exists():
+                occupied = parse_note(base.read_text(encoding="utf-8"))[0].get("mela_id") != recipe.id
             # Eighteen titles repeat in this library, and ids are often URLs whose first characters are the same host — so disambiguate on a hash of the whole id, not a prefix of it.
-            taken = claimed.get(base, recipe.id) != recipe.id or (base.exists() and (parse_note(base.read_text(encoding="utf-8"))[0].get("mela_id") or recipe.id) != recipe.id)
-            path = vault / f"{safe_name(recipe.title)} ({digest(recipe.id)}).md" if taken else base
+            path = vault / f"{safe_name(recipe.title)} ({digest(recipe.id)}).md" if occupied else base
         claimed[path] = recipe.id
 
         existing_meta, existing_body = ({}, "")
