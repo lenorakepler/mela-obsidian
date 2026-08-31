@@ -97,6 +97,34 @@ Splitting these is not automatable: the numbering is gone, so a script would hav
 
 Also worth noting: `Shockingly Easy No-Knead Focaccia` is in the library twice with identical instructions.
 
+## The Evernote recipe cache
+
+**2,750 notes in `~/vault/Old/Evernote/Food`, plus 129 in `Old/Evernote/Food Ideas  Eaten`** — more than double the Mela library, imported from Evernote in every state of repair. Most were web clippings, so they arrived with the whole page: navigation, subscribe prompts, social buttons, icons, and the images that went with all of it.
+
+What a sample of them looks like:
+
+| | Notes |
+| --- | --- |
+| Total | 2,750 |
+| Contain images | 1,739 |
+| Have a recognisable `## Ingredients` / `## Directions` heading | 575 |
+| Contain nav or marketing text (sign in, subscribe, share this, advertisement) | 413 |
+| Bare link-only lines, the shape a stripped nav bar leaves | 726 |
+| Over 12,000 characters | 250 |
+
+Only about a fifth have recipe structure a parser could latch onto, which is the first thing to face: **this is a triage problem before it is an extraction problem.** Many of these are probably not recipes at all — a saved article, a restaurant list, a note to self — and deciding which are worth keeping cannot be done by pattern alone.
+
+A workable order:
+
+1. **Classify.** Recipe, recipe-adjacent (an article that contains one), or not a recipe. Cheap signals first — an ingredient-shaped list, a quantity vocabulary, a `## Directions` heading — then read the ambiguous remainder.
+2. **Strip the page.** The clipped clutter is regular enough to be worth a pass of its own: link-only lines, known marketing phrases, icon images. `verbatim_clean`'s host-profile approach in the job-search repo is the same problem solved once already.
+3. **Extract.** Title, ingredients, steps into the same shape `pull` writes, so they can join the vault as ordinary recipe notes.
+4. **De-duplicate against Mela's 1,235.** Some fraction of these were later re-saved into Mela properly, and importing them again would undo the work in the section above. Match on normalised source URL first, title second.
+
+Only step 2 is really mechanical. The rest wants judgement per note, which suits a skill working in batches with review, rather than one script run over 2,750 files.
+
+Worth deciding up front how much of this is wanted at all. A cache of clippings that has sat untouched since the Evernote export may be more valuable as a searchable archive than as 2,750 more recipe notes.
+
 ## Safety nets
 
 Two independent ones, worth knowing before deciding how carefully to tread.
