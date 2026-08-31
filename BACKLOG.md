@@ -129,6 +129,26 @@ The notes also carry their Evernote tags, and two of them are useful for orderin
 
 **`Made` is where to start.** 386 notes marked as actually cooked, and only 29 of them are in Mela — so roughly 357 recipes she has made and kept are sitting unimported. Not because the rest are doubtful, but because these are the ones already known to be worth the trouble, which makes them the right batch to shake the extraction out on before running it across all 2,700.
 
+### Re-fetch rather than parse
+
+Most of these notes record where they came from, and a live URL is worth more than the clipping wrapped around it — re-downloading gives clean structured text with no page chrome to strip.
+
+| | Notes |
+| --- | --- |
+| `source` URL in frontmatter | 1,458 |
+| URL only in the body | 415 |
+| No URL at all | 715 |
+
+The hosts are mainstream and well-parsed: NYT 235, Bon Appétit 222, Food52 200, Serious Eats 138, Smitten Kitchen 69, Epicurious 62.
+
+This is the same mechanism as the NYT calorie item above — Mela's `Download Recipe` Shortcuts action takes a URL and returns a parsed recipe. Build that Shortcut once and it serves both jobs, and these arrive in Mela the way any web recipe does.
+
+Three things to get right:
+
+- **A body URL is not a source URL.** In one sampled clipping the first link in the body was the blog's homepage from its navigation bar, not the recipe. Taking the first URL found would fetch the wrong page and look like it worked. The 1,458 with frontmatter are safe; the 415 are not, without a look.
+- **Some hosts are gone.** `cookinglight.com` (47) and `myrecipes.com` (32) are defunct or redirected, so around 80 will return a homepage rather than a 404 — success-shaped failure. Compare the fetched title against the note's before accepting anything.
+- **Keep the clipping until the fetch is verified.** For the 715 with no URL, and for anything that fails, parsing the existing text is still the fallback.
+
 A workable order:
 
 1. **Recognise the shape.** Not "is this a recipe" but "where does the recipe start". The formats seen so far: a `## Ingredients` heading (575), bare `INGREDIENTS` capitals, a yield line followed directly by ingredients, and a full page clip with the recipe somewhere inside it. A quantity-dense run of short lines is the signal that survives all four.
