@@ -112,6 +112,10 @@ What a sample of them looks like:
 | Bare link-only lines, the shape a stripped nav bar leaves | 726 |
 | Over 12,000 characters | 250 |
 
+**They are already sorted, which is worth more than any of the statistics below.** The folder is 21 subcategories that map straight onto Mela's categories — `Main - GrainsBowls` (629), `Salads` (337), `Dessert` (310), `SaucesDressings` (225), `Side - Non-Vegetable` (184), `Appetizers` (157) and so on. Two of those folders are not recipes and can be set aside up front: `Not Recipes` (32) and `TOC` (128), the latter being cookbook tables of contents. That leaves **2,588 recipes, pre-categorised**.
+
+Images live in a `_resources` directory inside each subcategory, holding about 12,000 files and no markdown. They are not all photographs: 5,636 are SVGs averaging 616 bytes, which is site iconography, against 3,535 JPEGs averaging 49 KB, which is food. Size alone separates them.
+
 **Nearly all of these are recipes.** Only 575 use an `## Ingredients` heading, but that measures formatting, not content: sampling the rest turns up `INGREDIENTS` in bare capitals, a `Serves 4` line followed straight by the ingredients, and web clips where the recipe is buried under the site's navigation. A handful are indexes or lists. So this is an extraction and cleanup problem across roughly 2,700 recipes, not a question of which ones are recipes.
 
 The notes also carry their Evernote tags, and two of them are useful for ordering the work:
