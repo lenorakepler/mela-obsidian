@@ -26,6 +26,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 
@@ -745,6 +746,59 @@ def split_logs(args):
         print(f"  {skipped_undated} dated line(s) had no year and were left in place")
 
 
+def clean_url(url: str) -> str:
+    """Drop query strings and fragments. Mela keeps whatever URL a share sheet handed it, so the same recipe arrives as three entries differing only in `smid` or `unlocked_article_code`."""
+    parts = urlsplit(url.strip())
+    return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/"), "", ""))
+
+
+def refetch_nutrition(args):
+    """Ask Mela to re-download recipes whose nutrition is missing a value, through a Shortcut.
+
+    Mela ships a "Download Recipe" Shortcuts action, so its own parser and its own site access do the fetching. We only supply URLs and write back what comes out — no scraping here, and nothing that works around a paywall.
+    """
+    library = [r for r in read_library()
+               if args.host in (r.link or "") and r.nutrition.strip()
+               and not parse_nutrition(r.nutrition).get(args.field)]
+    seen, targets = set(), []
+    for recipe in library:
+        url = clean_url(recipe.link)
+        if url not in seen:
+            seen.add(url)
+            targets.append((recipe, url))
+    if args.limit:
+        targets = targets[:args.limit]
+    print(f"{len(library)} recipe(s) on {args.host} with nutrition but no {args.field}; {len(targets)} unique URL(s) to try")
+
+    updated = []
+    for number, (recipe, url) in enumerate(targets, 1):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, result = Path(tmp) / "in.txt", Path(tmp) / "out.txt"
+            source.write_text(url, encoding="utf-8")
+            run = subprocess.run(["shortcuts", "run", args.shortcut, "-i", str(source), "-o", str(result)],
+                                 capture_output=True, text=True)
+            if run.returncode != 0:
+                print(f"  [{number}] shortcut failed: {run.stderr.strip()[:120]}")
+                continue
+            text = result.read_text(encoding="utf-8", errors="replace") if result.exists() else ""
+        found = parse_nutrition(text)
+        if args.field not in found:
+            print(f"  [{number}] no {args.field} returned: {recipe.title[:52]}")
+            continue
+        recipe.nutrition = text.strip() if args.replace else f"{recipe.nutrition.rstrip()}\n**Calories** {found['calories']:g}"
+        updated.append(recipe)
+        print(f"  [{number}] {args.field}={found[args.field]:g}  {recipe.title[:52]}")
+
+    if not updated:
+        print("nothing to write")
+        return
+    if args.dry_run:
+        print(f"would update {len(updated)} recipe(s) (dry run)")
+        return
+    write_to_mela(updated)
+    print(f"updated {len(updated)} recipe(s); launch Mela so it exports them")
+
+
 def status(args):
     library = {r.id: r for r in read_library()}
     notes = {}
@@ -854,6 +908,15 @@ def main():
     p = sub.add_parser("split-logs", help="lift dated Notes entries into their own cook-log notes")
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=split_logs)
+
+    p = sub.add_parser("refetch-nutrition", help="re-download nutrition through Mela's own Shortcuts action")
+    p.add_argument("--shortcut", default="Mela Fetch", help="name of the Shortcut wrapping Mela's Download Recipe action")
+    p.add_argument("--host", default="cooking.nytimes.com")
+    p.add_argument("--field", default="calories")
+    p.add_argument("--limit", type=int, help="stop after this many, for testing")
+    p.add_argument("--replace", action="store_true", help="replace the whole nutrition field rather than appending the missing value")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=refetch_nutrition)
 
     p = sub.add_parser("status", help="what differs between the two sides")
     p.set_defaults(func=status)

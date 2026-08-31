@@ -33,6 +33,10 @@ The script has a [PEP 723](https://peps.python.org/pep-0723/) header, so `uv run
 
 `mela_id`, `mela_hash`, and `mela_date_raw` are machinery, and the Properties panel invites a stray keystroke into them. `snippets/hide-sync-properties.css` hides all three from the properties editor and from Bases table and card views. It hides them from the UI only — the file still carries them, which is what this tool reads.
 
+## Not finished
+
+`BACKLOG.md` holds the one piece that is written but not working: recovering the calorie counts NYT publishes and Mela's importer did not capture, through Mela's own `Download Recipe` Shortcuts action. The code is committed; it needs a Shortcut built by hand, because a `.shortcut` file is signed and cannot be generated.
+
 ## Backing up first
 
 ```bash
