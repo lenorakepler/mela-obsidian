@@ -112,7 +112,16 @@ What a sample of them looks like:
 | Bare link-only lines, the shape a stripped nav bar leaves | 726 |
 | Over 12,000 characters | 250 |
 
-Only about a fifth have recipe structure a parser could latch onto, which is the first thing to face: **this is a triage problem before it is an extraction problem.** Many of these are probably not recipes at all — a saved article, a restaurant list, a note to self — and deciding which are worth keeping cannot be done by pattern alone.
+Only about a fifth have recipe structure a parser could latch onto. But the notes carry Evernote tags, and two of them do the triage that no classifier could:
+
+| Tag | Notes | Already in Mela |
+| --- | --- | --- |
+| `Transferred` | 57 | 43 (75%) |
+| `Made` | 386 | 29 (7%) |
+
+`Transferred` is reliable — matching on titles normalised for the site suffixes Evernote appended (`- BA`, `TASTE`, `| Serious Eats`), 43 of 57 are confirmed present, and the misses are junk titles like `Untitled Note` rather than failures of the tag. Use it to exclude.
+
+**`Made` is where to start.** 386 notes marked as actually cooked, and only 29 of them are in Mela — so roughly 357 recipes she has made and kept are sitting unimported. That is a better selection than any heuristic could produce, because it is a record of what was worth cooking rather than a guess at what looks like a recipe. Doing those first turns a 2,750-note triage into a 357-note extraction job, and leaves the rest to be decided later or not at all.
 
 A workable order:
 
