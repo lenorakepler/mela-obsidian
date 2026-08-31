@@ -461,6 +461,9 @@ def pull(args):
         print(f"  note: {duplicates} recipe(s) in Mela share an id with another and collapse into one note")
 
     for recipe in library:
+        # Two rows sharing an id are one recipe as far as everything downstream is concerned, and writing both means each overwrites the other on every run.
+        if recipe.id in claimed.values():
+            continue
         path = index.get(recipe.id)
         if path is None:
             base = vault / f"{safe_name(recipe.title)}.md"
@@ -492,10 +495,10 @@ def pull(args):
             image = f"attachments/{image}"
 
         body = body_for(recipe, image)
-        # This recipe is exactly what we last pushed, so Mela has learnt nothing since. Regenerating the note would flatten its embeds back into the plain text we sent.
-        if existing_meta.get("mela_sent") == digest(body):
-            skipped += 1
-            continue
+        # Mela has learnt nothing since we last handed it this text, so keep the vault's own version of the body — embeds and all — and let only the frontmatter be refreshed below.
+        preserved = existing_meta.get("mela_sent") == digest(body)
+        if preserved:
+            body = existing_body
         meta = {
             "title": recipe.title,
             "cssclasses": ["recipe"],
@@ -507,8 +510,15 @@ def pull(args):
             "mela_date_raw": recipe.date,
             "mela_hash": digest(body),
         }
+        if existing_meta.get("mela_sent"):
+            meta["mela_sent"] = existing_meta["mela_sent"]
         if image:
             meta["image"] = image
+
+        # Mela records that a recipe is flagged, never when it was flagged, so a "want to cook" list can only be ordered by when the recipe was added. Stamp the first sync that sees the flag set and keep that date for as long as it stays set. Keyed on whether the stamp exists rather than on the flag changing, so a flag flipped from a card in Obsidian is stamped on the next pull just the same.
+        for flag, stamp in (("favorite", "favorite_since"), ("wantToCook", "wantToCook_since")):
+            if meta[flag]:
+                meta[stamp] = existing_meta.get(stamp) or datetime.now().date().isoformat()
         if existing_body.strip() == body.strip() and dict(existing_meta) == meta:
             skipped += 1
             continue
@@ -667,6 +677,8 @@ def split_logs(args):
         if not args.dry_run:
             new_body = head + "## Notes\n" + "\n".join(out) + (sep + tail if sep else "")
             meta["mela_hash"] = digest(new_body)
+            # The body we started from is, by construction, what Mela holds. Without this the next pull rebuilds that text and the embeds are gone.
+            meta["mela_sent"] = digest(body)
             front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=10**9)
             path.write_text(f"---\n{front}---\n\n{new_body.lstrip()}", encoding="utf-8")
 
